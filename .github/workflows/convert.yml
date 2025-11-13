@@ -3,22 +3,24 @@ name: Update PrivateTracker MRS
 on:
   workflow_dispatch:
   schedule:
-    # 每 7 天跑一次（UTC 0 点）
-    - cron: "0 0 */7 * *"
+    - cron: "0 0 */7 * *"   # 每 7 天更新
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 🔥 最关键：允许 push
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false
 
       - name: Download source YAML
         run: |
-          curl -L "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/PrivateTracker/PrivateTracker.yaml" -o PrivateTracker.yaml
+          mkdir -p sources
+          curl -L \
+            -o sources/PrivateTracker.yaml \
+            https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/PrivateTracker/PrivateTracker.yaml
 
       - name: Install jq
         run: |
@@ -30,23 +32,13 @@ jobs:
           set -e
           echo "Fetching latest mihomo release info..."
 
-          # 拉最新 release 的 JSON
           json=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest)
 
-          # 从 assets 里找出带 linux-amd64 且以 .gz 结尾的文件名
           asset_name=$(echo "$json" | jq -r '.assets[].name | select(contains("linux-amd64") and endswith(".gz"))' | head -n 1)
-
-          if [ -z "$asset_name" ]; then
-            echo "❌ 没找到 linux-amd64 的 .gz 资产，当前 assets 列表："
-            echo "$json" | jq -r '.assets[].name'
-            exit 1
-          fi
-
-          # 根据文件名取下载地址
           download_url=$(echo "$json" | jq -r ".assets[] | select(.name==\"$asset_name\") | .browser_download_url")
 
-          echo "✅ 选择的资产：$asset_name"
-          echo "🔗 下载地址：$download_url"
+          echo "Using asset: $asset_name"
+          echo "URL: $download_url"
 
           curl -L "$download_url" -o mihomo.gz
           gunzip mihomo.gz
@@ -54,27 +46,19 @@ jobs:
           chmod +x mihomo
           sudo mv mihomo /usr/local/bin/mihomo
 
-          echo "Mihomo version:"
-          mihomo -v
-
       - name: Convert YAML to MRS
         run: |
-          set -e
           mkdir -p mrs
-          mihomo convert-ruleset domain yaml ./PrivateTracker.yaml ./mrs/PrivateTracker.mrs
+          mihomo convert-ruleset domain yaml \
+            sources/PrivateTracker.yaml \
+            mrs/PrivateTracker.mrs
 
       - name: Commit and Push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          if git status --porcelain | grep -q "mrs/PrivateTracker.mrs"; then
-            git add mrs/PrivateTracker.mrs
-            git commit -m "Update PrivateTracker.mrs"
-            git push
-          else
-            echo "No changes in mrs/PrivateTracker.mrs, skip commit."
-          fi
+          git add mrs/PrivateTracker.mrs sources/PrivateTracker.yaml
+
+          git commit -m "Update PrivateTracker.mrs" || echo "No changes"
+          git push origin main
