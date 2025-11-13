@@ -3,7 +3,7 @@ name: Update PrivateTracker MRS
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 0 * * 1"   # 每周一更新一次（UTC 0:00）
+    - cron: "0 0 * * 1"
 
 jobs:
   build:
@@ -20,25 +20,23 @@ jobs:
             -o sources/PrivateTracker.yaml \
             https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/PrivateTracker/PrivateTracker.yaml
 
-      - name: Get latest Mihomo release (zip version)
-        id: get_mihomo
+      - name: Get latest Mihomo release (zip)
         run: |
           api="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
           curl -s $api > release.json
 
-          # 找到 zip 格式的 amd64 文件
-          asset_name=$(jq -r '.assets[].name' release.json | grep -i "^mihomo-linux-amd64.zip$" | head -n 1)
+          asset_name=$(jq -r '.assets[].name' release.json | grep -i '^mihomo-linux-amd64.zip$' | head -n 1)
           download_url=$(jq -r ".assets[] | select(.name==\"$asset_name\") | .browser_download_url" release.json)
-
-          echo "Using asset: $asset_name"
-          echo "Download URL: $download_url"
 
           echo "asset_name=$asset_name" >> $GITHUB_ENV
           echo "download_url=$download_url" >> $GITHUB_ENV
 
+          echo "Found asset: $asset_name"
+          echo "URL: $download_url"
+
       - name: Download and extract Mihomo
         run: |
-          wget "$download_url" -O mihomo.zip
+          wget "${{ env.download_url }}" -O mihomo.zip
           unzip mihomo.zip
           chmod +x mihomo-linux-amd64
           sudo install -m 755 mihomo-linux-amd64 /usr/local/bin/mihomo
@@ -46,7 +44,9 @@ jobs:
       - name: Convert YAML → MRS
         run: |
           mkdir -p mrs
-          mihomo tools convert-ruleset domain yaml sources/PrivateTracker.yaml mrs/PrivateTracker.mrs
+          mihomo tools convert-ruleset domain yaml \
+            sources/PrivateTracker.yaml \
+            mrs/PrivateTracker.mrs
 
       - name: Commit and Push
         run: |
