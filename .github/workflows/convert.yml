@@ -1,13 +1,14 @@
 name: Update PrivateTracker MRS
 
 on:
-  schedule:
-    - cron: "0 0 * * 0"    # 每周日 00:00 运行（UTC）
   workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 1"  # 每周一更新一次
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -21,14 +22,15 @@ jobs:
 
       - name: Install Mihomo (Meta Core)
         run: |
-          wget https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-linux-amd64
-          chmod +x mihomo-linux-amd64
-          sudo mv mihomo-linux-amd64 /usr/local/bin/mihomo
+          wget https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-linux-amd64-compatible
+          mv mihomo-linux-amd64-compatible mihomo
+          chmod +x mihomo
+          sudo install -m 755 mihomo /usr/local/bin/mihomo
 
       - name: Convert YAML → MRS
         run: |
           mkdir -p mrs
-          mihomo convert-ruleset domain yaml sources/PrivateTracker.yaml mrs/PrivateTracker.mrs
+          mihomo tools convert-ruleset domain yaml sources/PrivateTracker.yaml mrs/PrivateTracker.mrs
 
       - name: Commit and Push
         run: |
