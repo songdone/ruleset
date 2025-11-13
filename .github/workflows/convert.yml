@@ -1,0 +1,39 @@
+name: Update PrivateTracker MRS
+
+on:
+  schedule:
+    - cron: "0 0 * * 0"    # 每周日 00:00 运行（UTC）
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Download source YAML
+        run: |
+          mkdir -p sources
+          curl -L \
+            -o sources/PrivateTracker.yaml \
+            https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/PrivateTracker/PrivateTracker.yaml
+
+      - name: Install Mihomo (Meta Core)
+        run: |
+          wget https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-linux-amd64
+          chmod +x mihomo-linux-amd64
+          sudo mv mihomo-linux-amd64 /usr/local/bin/mihomo
+
+      - name: Convert YAML → MRS
+        run: |
+          mkdir -p mrs
+          mihomo convert-ruleset domain yaml sources/PrivateTracker.yaml mrs/PrivateTracker.mrs
+
+      - name: Commit and Push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Update PrivateTracker.mrs" || echo "No changes"
+          git push
