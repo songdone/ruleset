@@ -3,7 +3,7 @@ name: Update PrivateTracker MRS
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 0 * * 1"   # 每周一运行一次
+    - cron: "0 0 * * 1"   # 每周一更新一次（UTC 0:00）
 
 jobs:
   build:
@@ -20,27 +20,28 @@ jobs:
             -o sources/PrivateTracker.yaml \
             https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/PrivateTracker/PrivateTracker.yaml
 
-      - name: Get latest Mihomo release info
-        id: mihomo
+      - name: Get latest Mihomo release (zip version)
+        id: get_mihomo
         run: |
-          api_url="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
-          echo "Fetching release info from: $api_url"
-          curl -s $api_url > release.json
-          echo "Assets in release:"
-          cat release.json | jq -r '.assets[].name'
-          # 过滤出 linux amd64 二进制文件
-          asset_name=$(cat release.json | jq -r '.assets[].name' | grep -i 'linux' | grep -i 'amd64' | head -n 1)
-          download_url=$(cat release.json | jq -r ".assets[] | select(.name==\"$asset_name\") | .browser_download_url")
-          echo "Found asset: $asset_name"
-          echo "Download URL: $download_url"
-          echo "::set-output name=asset_name::$asset_name"
-          echo "::set-output name=download_url::$download_url"
+          api="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
+          curl -s $api > release.json
 
-      - name: Download Mihomo binary
+          # 找到 zip 格式的 amd64 文件
+          asset_name=$(jq -r '.assets[].name' release.json | grep -i "^mihomo-linux-amd64.zip$" | head -n 1)
+          download_url=$(jq -r ".assets[] | select(.name==\"$asset_name\") | .browser_download_url" release.json)
+
+          echo "Using asset: $asset_name"
+          echo "Download URL: $download_url"
+
+          echo "asset_name=$asset_name" >> $GITHUB_ENV
+          echo "download_url=$download_url" >> $GITHUB_ENV
+
+      - name: Download and extract Mihomo
         run: |
-          wget "${{ steps.mihomo.outputs.download_url }}" -O mihomo_binary
-          chmod +x mihomo_binary
-          sudo install -m 755 mihomo_binary /usr/local/bin/mihomo
+          wget "$download_url" -O mihomo.zip
+          unzip mihomo.zip
+          chmod +x mihomo-linux-amd64
+          sudo install -m 755 mihomo-linux-amd64 /usr/local/bin/mihomo
 
       - name: Convert YAML → MRS
         run: |
